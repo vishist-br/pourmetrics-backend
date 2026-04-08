@@ -22,7 +22,7 @@ app.use('/api/analytics', require('./routes/analytics'));
 
 // Avoid connecting to Mongo if URI is not provided (for POC scaffolding)
 if (process.env.MONGODB_URI) {
-    mongoose.connect(process.env.MONGODB_URI, { useNewUrlParser: true, useUnifiedTopology: true })
+    mongoose.connect(process.env.MONGODB_URI)
         .then(() => console.log('MongoDB connected successfully'))
         .catch(err => console.error('MongoDB connection error:', err));
 } else {
