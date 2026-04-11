@@ -28,7 +28,8 @@ router.post('/', async (req, res) => {
             bottleBarcode,
             measuredWeightGrams,
             calculatedVolumeMl,
-            userId
+            userId,
+            wmId: 'inv_' + Date.now().toString() + '_' + Math.floor(Math.random() * 1000)
         });
 
         const newLog = await log.save();
@@ -61,4 +62,36 @@ router.get('/live-stock/:barId', async (req, res) => {
     }
 });
 
+// GET /api/inventory/recent?limit=50
+// Returns recent logs joined with product name for the History tab
+router.get('/recent', async (req, res) => {
+    try {
+        const limit = parseInt(req.query.limit || 50, 10);
+        const logs = await InventoryLog.find({ isDeleted: false })
+            .sort({ createdAt: -1 })
+            .limit(limit);
+
+        // Join product names
+        const barcodes = [...new Set(logs.map(l => l.bottleBarcode))];
+        const products = await Product.find({ barcode: { $in: barcodes } });
+        const productMap = {};
+        products.forEach(p => { productMap[p.barcode] = p.productName; });
+
+        const result = logs.map(l => ({
+            _id: l._id,
+            barcode: l.bottleBarcode,
+            productName: productMap[l.bottleBarcode] || l.bottleBarcode,
+            volumeMl: parseFloat(l.calculatedVolumeMl.toFixed(1)),
+            weightGrams: l.measuredWeightGrams,
+            userId: l.userId || null,
+            createdAt: l.createdAt
+        }));
+
+        res.json(result);
+    } catch (err) {
+        res.status(500).json({ message: err.message });
+    }
+});
+
 module.exports = router;
+

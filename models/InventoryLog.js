@@ -1,10 +1,15 @@
 const mongoose = require('mongoose');
 
 const inventoryLogSchema = new mongoose.Schema({
+    orgId: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'Organization',
+        default: null      // backfilled by migration script
+    },
     barId: {
         type: mongoose.Schema.Types.ObjectId,
         ref: 'Bar',
-        required: true
+        required: false    // was required, relaxed for multi-tenant migration
     },
     bottleBarcode: {
         type: String,
