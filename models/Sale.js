@@ -15,6 +15,10 @@ const saleSchema = new mongoose.Schema({
         type: String,
         required: true
     },
+    productName: {
+        type: String,
+        default: 'Unknown Product'
+    },
     volumeSoldMl: {
         type: Number,
         required: true
