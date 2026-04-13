@@ -1,15 +1,20 @@
-const express = require('express');
-const router = express.Router();
-const InventoryLog = require('../models/InventoryLog');
-const Product = require('../models/Product');
+const tenantGuard = require('../middleware/tenantGuard');
+
+// All inventory routes require login
+router.use(tenantGuard);
 
 // Submit a new inventory weight reading
 router.post('/', async (req, res) => {
     try {
-        const { barId, bottleBarcode, measuredWeightGrams, userId } = req.body;
+        const { barId, bottleBarcode, measuredWeightGrams } = req.body;
+        const orgId = req.orgId || process.env.DEFAULT_ORG_ID;
+        const userId = req.userId;
 
         // Fetch product to calculate volume instantly on backend as well
-        const product = await Product.findOne({ barcode: bottleBarcode });
+        const product = await Product.findOne({
+            barcode: bottleBarcode,
+            orgId: orgId
+        });
         if (!product) {
             return res.status(404).json({ message: 'Product not found for that barcode' });
         }
@@ -42,10 +47,10 @@ router.post('/', async (req, res) => {
 // Get Live Stock Dashboard Data based on latest logs
 router.get('/live-stock/:barId', async (req, res) => {
     try {
+        const orgId = req.orgId || process.env.DEFAULT_ORG_ID;
         // Find the LATEST log for each unique bottle
-        // This is a simplified aggregate just for the POC
         const recentLogs = await InventoryLog.aggregate([
-            { $match: { barId: req.params.barId } },
+            { $match: { barId: req.params.barId, orgId: orgId } },
             { $sort: { createdAt: -1 } },
             {
                 $group: {
@@ -66,14 +71,21 @@ router.get('/live-stock/:barId', async (req, res) => {
 // Returns recent logs joined with product name for the History tab
 router.get('/recent', async (req, res) => {
     try {
+        const orgId = req.orgId || process.env.DEFAULT_ORG_ID;
         const limit = parseInt(req.query.limit || 50, 10);
-        const logs = await InventoryLog.find({ isDeleted: false })
+        const logs = await InventoryLog.find({
+            orgId: orgId,
+            isDeleted: false
+        })
             .sort({ createdAt: -1 })
             .limit(limit);
 
         // Join product names
         const barcodes = [...new Set(logs.map(l => l.bottleBarcode))];
-        const products = await Product.find({ barcode: { $in: barcodes } });
+        const products = await Product.find({
+            barcode: { $in: barcodes },
+            orgId: orgId
+        });
         const productMap = {};
         products.forEach(p => { productMap[p.barcode] = p.productName; });
 
