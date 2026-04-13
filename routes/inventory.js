@@ -34,6 +34,7 @@ router.post('/', async (req, res) => {
 
         const log = new InventoryLog({
             barId,
+            orgId,
             bottleBarcode,
             measuredWeightGrams,
             calculatedVolumeMl,

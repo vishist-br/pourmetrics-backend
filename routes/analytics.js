@@ -3,6 +3,10 @@ const router = express.Router();
 const InventoryLog = require('../models/InventoryLog');
 const Sale = require('../models/Sale');
 const Product = require('../models/Product');
+const tenantGuard = require('../middleware/tenantGuard');
+
+// All analytics routes require login
+router.use(tenantGuard);
 
 // Main analytics summary endpoint - returns everything the dashboard needs
 router.get('/summary', async (req, res) => {
@@ -22,8 +26,10 @@ router.get('/summary', async (req, res) => {
         const todayStart = new Date();
         todayStart.setHours(0, 0, 0, 0);
 
-        // All products for name lookups
-        const allProducts = await Product.find({});
+        const targetOrgId = req.orgId || process.env.DEFAULT_ORG_ID;
+
+        // All products for name lookups (scoped to org)
+        const allProducts = await Product.find({ orgId: targetOrgId });
         const productMap = {};
         allProducts.forEach(p => {
             productMap[p.barcode] = {
@@ -34,8 +40,9 @@ router.get('/summary', async (req, res) => {
             };
         });
 
-        // Inventory logs for the period
+        // Inventory logs for the period (scoped to org)
         const logs = await InventoryLog.find({
+            orgId: targetOrgId,
             createdAt: { $gte: dateLimit },
             isDeleted: false
         }).sort({ createdAt: 1 });
@@ -70,8 +77,11 @@ router.get('/summary', async (req, res) => {
             });
         }
 
-        // POS sales for the period
-        const salesRaw = await Sale.find({ createdAt: { $gte: dateLimit } });
+        // POS sales for the period (scoped to org)
+        const salesRaw = await Sale.find({
+            orgId: targetOrgId,
+            createdAt: { $gte: dateLimit }
+        });
         const todaySales = salesRaw.filter(s => new Date(s.createdAt) >= todayStart);
 
         const salesMap = {};
@@ -126,10 +136,15 @@ router.get('/summary', async (req, res) => {
 // Backward-compatible endpoint
 router.get('/usage/daily/:barId', async (req, res) => {
     try {
+        const targetOrgId = req.orgId || process.env.DEFAULT_ORG_ID;
         const days = parseInt(req.query.days || 7, 10);
         const dateLimit = new Date();
         dateLimit.setDate(dateLimit.getDate() - days);
-        const logs = await InventoryLog.find({ createdAt: { $gte: dateLimit }, isDeleted: false }).sort({ createdAt: 1 });
+        const logs = await InventoryLog.find({
+            orgId: targetOrgId,
+            createdAt: { $gte: dateLimit },
+            isDeleted: false
+        }).sort({ createdAt: 1 });
         const bottleUsage = {};
         logs.forEach(log => {
             if (!bottleUsage[log.bottleBarcode]) bottleUsage[log.bottleBarcode] = [];
@@ -141,7 +156,7 @@ router.get('/usage/daily/:barId', async (req, res) => {
             analytics.push({ barcode, consumedVolumeMl: consumed, currentVolumeMl: volumes[volumes.length - 1], readingsCount: volumes.length });
         }
         const sales = await Sale.aggregate([
-            { $match: { createdAt: { $gte: dateLimit } } },
+            { $match: { orgId: targetOrgId, createdAt: { $gte: dateLimit } } },
             { $group: { _id: "$bottleBarcode", totalSoldMl: { $sum: "$volumeSoldMl" }, transactions: { $sum: 1 } } }
         ]);
         res.json({ period: `${days} days`, data: analytics, sales });

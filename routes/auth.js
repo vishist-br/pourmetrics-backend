@@ -3,6 +3,8 @@ const router = express.Router();
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const User = require('../models/User');
+const tenantGuard = require('../middleware/tenantGuard');
+const { ownerOrAbove } = require('../middleware/tenantGuard');
 
 const JWT_SECRET = process.env.JWT_SECRET || 'pourmetrics_secret_123';
 
@@ -56,24 +58,32 @@ router.post('/login', async (req, res) => {
     }
 });
 
-// GET /api/auth/users (Fetch all accounts for Owner)
-router.get('/users', async (req, res) => {
+// GET /api/auth/users (Fetch all accounts for the current Org)
+router.get('/users', tenantGuard, ownerOrAbove, async (req, res) => {
     try {
-        const users = await User.find().select('-password');
+        const targetOrgId = req.orgId || process.env.DEFAULT_ORG_ID;
+        const users = await User.find({ orgId: targetOrgId }).select('-password').sort({ createdAt: -1 });
         res.json(users);
     } catch (err) {
         res.status(500).json({ error: 'Server error fetching users' });
     }
 });
 
-// PATCH /api/auth/users/:id/role (Modify user role)
-router.patch('/users/:id/role', async (req, res) => {
+// PATCH /api/auth/users/:id/role (Modify user role - restricted to same org)
+router.patch('/users/:id/role', tenantGuard, ownerOrAbove, async (req, res) => {
     try {
         const { role } = req.body;
-        if (!['owner', 'user'].includes(role)) {
+        if (!['owner', 'staff', 'manager'].includes(role)) {
             return res.status(400).json({ error: 'Invalid role' });
         }
-        const user = await User.findByIdAndUpdate(req.params.id, { role }, { new: true }).select('-password');
+        const targetOrgId = req.orgId || process.env.DEFAULT_ORG_ID;
+        const user = await User.findOneAndUpdate(
+            { _id: req.params.id, orgId: targetOrgId },
+            { role },
+            { new: true }
+        ).select('-password');
+
+        if (!user) return res.status(404).json({ error: 'User not found in your organization' });
         res.json(user);
     } catch (err) {
         res.status(500).json({ error: 'Server error modifying role' });

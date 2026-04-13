@@ -52,12 +52,13 @@ router.post('/', async (req, res) => {
 // Fetch total volume sold per barcode over trailing N days
 router.get('/report', async (req, res) => {
     try {
+        const targetOrgId = req.orgId || process.env.DEFAULT_ORG_ID;
         const days = parseInt(req.query.days || 7, 10);
         const dateLimit = new Date();
         dateLimit.setDate(dateLimit.getDate() - days);
 
         const sales = await Sale.aggregate([
-            { $match: { createdAt: { $gte: dateLimit } } },
+            { $match: { orgId: targetOrgId, createdAt: { $gte: dateLimit } } },
             { $group: { _id: "$bottleBarcode", totalSoldMl: { $sum: "$volumeSoldMl" }, transactions: { $sum: 1 } } }
         ]);
         res.json(sales);
