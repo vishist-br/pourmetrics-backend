@@ -1,3 +1,7 @@
+const express = require('express');
+const router = express.Router();
+const Product = require('../models/Product');
+const InventoryLog = require('../models/InventoryLog');
 const tenantGuard = require('../middleware/tenantGuard');
 
 // All sync routes require login
